@@ -14,6 +14,10 @@ int main(int argc, char** argv ){
 	TTree * outTree = new TTree("reduced_data","Reduced data from EDM run");
 	int out_Cycle;
 	int out_Run;
+	double out_fHgTop 	= 0;
+	double out_fHgBot 	= 0;
+	double out_fHgTopErr 	= 0;
+	double out_fHgBotErr 	= 0;
 	vector<double> out_CsField(16); 
 	vector<double> out_CsX(16); 
 	vector<double> out_CsY(16); 
@@ -22,6 +26,10 @@ int main(int argc, char** argv ){
 
 	outTree->Branch("Cycle",	&out_Cycle	);
 	outTree->Branch("Run",		&out_Run	);
+	outTree->Branch("fHgTop",	&out_fHgTop	);
+	outTree->Branch("fHgBot",	&out_fHgBot	);
+	outTree->Branch("fHgTopErr",	&out_fHgTopErr	);
+	outTree->Branch("fHgBotErr",	&out_fHgBotErr	);
 	outTree->Branch("CsField",	&out_CsField	);
 	outTree->Branch("CsX",		&out_CsX	);
 	outTree->Branch("CsY",		&out_CsY	);
@@ -53,6 +61,30 @@ int main(int argc, char** argv ){
 	int max_cycle = 208;
 	for( int this_cycle = start_cycle ; this_cycle <= max_cycle ; this_cycle++ ){
 
+		//////////////////////////////////////////////////////////
+		// Read onlineAna Hgm file
+		string filename_Hgm = std::format("../../dataset/8003/008003_{:06}_000_onlineAna_hgm_000.hd",this_cycle);
+		N2_ReadFile(filename_Hgm.c_str(), &N2data);
+		if( N2data.NbRow != 1 ){
+			cerr << "Unexpected onlineAna file size of " << N2data.NbRow << ", cycle " << this_cycle << "\n";
+			continue;
+		}
+		double fHgTop 		= ((double**)N2data.Data)[0][9];
+		double fHgBot 		= ((double**)N2data.Data)[0][10];
+		double fHgTopErr 	= ((double**)N2data.Data)[0][11];
+		double fHgBotErr 	= ((double**)N2data.Data)[0][12];
+		if( fHgTop != fHgTop ) fHgTop = 0.;
+		if( fHgBot != fHgBot ) fHgBot = 0.;
+		// convert to field:
+		
+		N2_ClearConfig(&N2data);
+		//////////////////////////////////////////////////////////
+
+
+
+
+		// Read Csm file:
+		
 		// Create filename string given the cycle:
 		string filename = std::format("../../dataset/8003/008003_{:06}_000_csm_000.hd",this_cycle);
 
@@ -98,9 +130,18 @@ int main(int argc, char** argv ){
 
 		}
 
+		
+		
+
+
+
 		// Save to tree
 		out_Cycle	= this_cycle;
 		out_Run		= this_run;
+		out_fHgTop	= fHgTop;
+		out_fHgBot	= fHgBot;
+		out_fHgTopErr	= fHgTopErr;
+		out_fHgBotErr	= fHgBotErr;
 		out_CsField	= avg_ch_field;
 		outTree->Fill();
 	}
