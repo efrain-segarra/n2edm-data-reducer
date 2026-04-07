@@ -1,49 +1,33 @@
 #include "data_reducer.h"
 
+// TODO:
+// - only look at temperature during precession time (need relevant timestamp)
+// - add rf, sf, hv, files
 
 int main(int argc, char** argv ){
+	// ---------------------------------------------------------
+	// Check arguments
+	// ---------------------------------------------------------
+	if( argc != 2 ){
+		cerr << "Unexpected number of arguments. Instead use:" << endl;
+		cerr << "\t./data_reducer [RUN NUMBER]" << endl;
+		return 1;
+	}
+
+
+	// ---------------------------------------------------------
 	// Set flags for the logger for error/output messages
+	// ---------------------------------------------------------
 	SimpleLog_Setup(NULL, NULL, 0, 0, 0, "\t");
 	SimpleLog_FilterLevel(SL_ERROR/*|SL_NOTICE SL_ALL*/); // Default is SL_ALL
-
-	// Create data structure to be used for EDM datafiles
-	tN2data N2data = {0};
-
-	// Initialize ROOT file
-	std::unique_ptr<TFile> outFile( TFile::Open("test.root","RECREATE") );
-	TTree * outTree = new TTree("reduced_data","Reduced data from EDM run");
-	int out_Cycle;
-	int out_Run;
-	double out_fHgTop 	= 0;
-	double out_fHgBot 	= 0;
-	double out_fHgTopErr 	= 0;
-	double out_fHgBotErr 	= 0;
-	vector<double> out_CsField(16); 
-	vector<double> out_CsX(16); 
-	vector<double> out_CsY(16); 
-	vector<double> out_CsZ(16); 
-	vector<double> out_CsFieldCalc(16); 
-
-	outTree->Branch("Cycle",	&out_Cycle	);
-	outTree->Branch("Run",		&out_Run	);
-	outTree->Branch("fHgTop",	&out_fHgTop	);
-	outTree->Branch("fHgBot",	&out_fHgBot	);
-	outTree->Branch("fHgTopErr",	&out_fHgTopErr	);
-	outTree->Branch("fHgBotErr",	&out_fHgBotErr	);
-	outTree->Branch("CsField",	&out_CsField	);
-	outTree->Branch("CsX",		&out_CsX	);
-	outTree->Branch("CsY",		&out_CsY	);
-	outTree->Branch("CsZ",		&out_CsZ	);
-	outTree->Branch("CsFieldCalc",	&out_CsFieldCalc);
-
+	
+	// ---------------------------------------------------------
+	// Build the B0 field using gradient expansion and map coefficients
+	// ---------------------------------------------------------
 	// Load the gradient field map
 	map<string,GradientInfo> FieldMap = Gradients("../../dataset/fieldmap/001_updated_optimized_all_B0_2022_2025.csv");
-
-
-	// Load specific run
-	int this_run = 8003;
-
-	// Calculate the Cs fields just once assuming mapping
+	/*
+	// Calculate the fields at the Cs sensor locations
 	for( int ch=0; ch < out_CsFieldCalc.size(); ch++){
 		Bvector pos = CsCellPosition( ch+1 ); // daq channel starts at 1, not 0
 		Bvector B0 = CalculateField( FieldMap, pos.rho, pos.phi, pos.z, "up");
@@ -53,108 +37,153 @@ int main(int argc, char** argv ){
 		out_CsZ.at(ch) = pos.z;
 		out_CsFieldCalc.at(ch) = sqrt(B0.rho*B0.rho + B0.phi*B0.phi + B0.z*B0.z);
 	}
-	
+	*/
 
 
-	// Loop over all cycles in a run
-	int start_cycle = 0;
-	int max_cycle = 208;
-	for( int this_cycle = start_cycle ; this_cycle <= max_cycle ; this_cycle++ ){
-
-		//////////////////////////////////////////////////////////
-		// Read onlineAna Hgm file
-		string filename_Hgm = std::format("../../dataset/8003/008003_{:06}_000_onlineAna_hgm_000.hd",this_cycle);
-		N2_ReadFile(filename_Hgm.c_str(), &N2data);
-		if( N2data.NbRow != 1 ){
-			cerr << "Unexpected onlineAna file size of " << N2data.NbRow << ", cycle " << this_cycle << "\n";
-			continue;
-		}
-		double fHgTop 		= ((double**)N2data.Data)[0][9];
-		double fHgBot 		= ((double**)N2data.Data)[0][10];
-		double fHgTopErr 	= ((double**)N2data.Data)[0][11];
-		double fHgBotErr 	= ((double**)N2data.Data)[0][12];
-		if( fHgTop != fHgTop ) fHgTop = 0.;
-		if( fHgBot != fHgBot ) fHgBot = 0.;
-		// convert to field:
-		
-		N2_ClearConfig(&N2data);
-		//////////////////////////////////////////////////////////
+	// ---------------------------------------------------------
+	// Load specific run from user
+	// ---------------------------------------------------------
+	int this_run = atoi(argv[1]);
 
 
 
+	// ---------------------------------------------------------
+	// Format strings and get base directory of run:
+	// ---------------------------------------------------------
+	std::string run_str = formatNumber(this_run, 6);	// "008003"
+	std::string dir_part1 = run_str.substr(0, 3);		// "008"
+	std::string dir_part2 = run_str.substr(3, 3);		// "003"
+	//std::string base_run_dir = "/xdata/n2edmdata/" + dir_part1 + "/" + dir_part2 + "/";
+	std::string base_run_dir = "/Users/efrainsegarra/work/n2EDM/projects/dec2025_analysis/dataset/" + string(argv[1]) + "/";
+	std::string output_filename = "run_" + run_str + "_reduced.root";
 
-		// Read Csm file:
-		
-		// Create filename string given the cycle:
-		string filename = std::format("../../dataset/8003/008003_{:06}_000_csm_000.hd",this_cycle);
 
-		// Load data into structure
-		N2_ReadFile(filename.c_str(), &N2data);
+	// ---------------------------------------------------------
+	// Check for base directory:
+	// ---------------------------------------------------------
+	if (!fs::exists(base_run_dir)) {
+		cerr << "Error: Run directory does not exist" << endl;
+		return 1;
+	}
 
-		// Create average array for frequencies
-		vector<double> avg_ch_field(16);
-		int it=0;
 
-		// Loop over events/rows
-		for( int r=0; r<N2data.NbRow; r++ ){
-			double csm_timestamp = ((double**)N2data.Data)[r][0];
+	// ---------------------------------------------------------
+	// Scan directory to find unique cycles:
+	// ---------------------------------------------------------
+	std::set<int> available_cycles;
+	std::string run_prefix = run_str + "_";			// "008003_"
 
-			// Hardcoded free precession window
-			if( csm_timestamp > 47.2102 && csm_timestamp < 227.21 ){
-			//if( csm_timestamp > 55. && csm_timestamp < 220. ){
-				// Grab the frequencies for the 16 cells
-				avg_ch_field.at(0)  += ((double**)N2data.Data)[r][34];
-				avg_ch_field.at(1)  += ((double**)N2data.Data)[r][35];
-				avg_ch_field.at(2)  += ((double**)N2data.Data)[r][36];
-				avg_ch_field.at(3)  += ((double**)N2data.Data)[r][37];
-				avg_ch_field.at(4)  += ((double**)N2data.Data)[r][38];
-				avg_ch_field.at(5)  += ((double**)N2data.Data)[r][39];
-				avg_ch_field.at(6)  += ((double**)N2data.Data)[r][40];
-				avg_ch_field.at(7)  += ((double**)N2data.Data)[r][41];
-				avg_ch_field.at(8)  += ((double**)N2data.Data)[r][42];
-				avg_ch_field.at(9)  += ((double**)N2data.Data)[r][43];
-				avg_ch_field.at(10) += ((double**)N2data.Data)[r][44];
-				avg_ch_field.at(11) += ((double**)N2data.Data)[r][45];
-				avg_ch_field.at(12) += ((double**)N2data.Data)[r][46];
-				avg_ch_field.at(13) += ((double**)N2data.Data)[r][47];
-				avg_ch_field.at(14) += ((double**)N2data.Data)[r][48];
-				avg_ch_field.at(15) += ((double**)N2data.Data)[r][49];
-				it+=1;
+	for (const auto& entry : fs::directory_iterator(base_run_dir)) {
+		if (entry.is_regular_file()) {
+			std::string fname = entry.path().filename().string();
+
+			// Check if file starts with our run prefix and is long enough
+			if (fname.find(run_prefix) == 0 && fname.length() >= 13) {
+				// Extract the cycle part (e.g., from "008003_000020...", extract "000020")
+				std::string cycle_str = fname.substr(7, 6);
+				try {
+					available_cycles.insert(std::stoi(cycle_str));
+				} catch (...) {
+					// Ignore files that don't match the strict integer naming convention
+				}
 			}
-		}	
-		N2_ClearConfig(&N2data);
-
-		// Scale the frequencies to Bfield
-		for( int ch=0; ch< avg_ch_field.size(); ch++ ){
-			avg_ch_field.at(ch) /= (double(it) * 1000 * 2 * gammaF / 1e6 );
-
 		}
+	}
+	cout << "Found " << available_cycles.size() << " unique cycles in run " << this_run << endl;
 
+
+	// ---------------------------------------------------------
+	// Initialize ROOT file
+	// ---------------------------------------------------------
+	TFile * outFile = new TFile(output_filename.c_str(), "RECREATE");
+	TTree * outTree = new TTree("reduced_data","Reduced data from EDM run");
+	int out_Run 		= this_run;
+	int out_Cycle 		= 0;
+	double out_Temperature 	= DUMMY_VAL;
+	double out_B_Hg_Top	= DUMMY_VAL;
+	double out_B_Hg_Bot	= DUMMY_VAL;
+	double out_B_Hg_Top_Err	= DUMMY_VAL;
+	double out_B_Hg_Bot_Err	= DUMMY_VAL;
+	double out_Ucn_Top	= DUMMY_VAL;
+	double out_Ucn_Bot	= DUMMY_VAL;
+	double out_A_Top	= DUMMY_VAL;
+	double out_A_Bot	= DUMMY_VAL;
+
+	outTree->Branch("Cycle"		,&out_Cycle		,"Cycle/I"		);
+	outTree->Branch("Run"		,&out_Run		,"Run/I"		);
+	outTree->Branch("Temperature"	,&out_Temperature	,"Temperature/D"	);
+	outTree->Branch("B_Hg_Top"	,&out_B_Hg_Top		,"B_Hg_Top/D"		);
+	outTree->Branch("B_Hg_Bot"	,&out_B_Hg_Bot		,"B_Hg_Bot/D"		);
+	outTree->Branch("B_Hg_Top_Err"	,&out_B_Hg_Top_Err	,"B_Hg_Top_Err/D"	);
+	outTree->Branch("B_Hg_Bot_Err"	,&out_B_Hg_Bot_Err	,"B_Hg_Bot_Err/D"	);
+	outTree->Branch("Ucn_Top"	,&out_Ucn_Top		,"Ucn_Top/D"		);
+	outTree->Branch("Ucn_Bot"	,&out_Ucn_Bot		,"Ucn_Bot/D"		);
+	outTree->Branch("A_Top"		,&out_A_Top		,"A_Top/D"		);
+	outTree->Branch("A_Bot"		,&out_A_Bot		,"A_Bot/D"		);
+
+
+
+
+	// ---------------------------------------------------------
+	// Loop over the cycles:
+	// ---------------------------------------------------------
+	for( int current_cycle : available_cycles ){
+		std::string cycle_str = base_run_dir + run_str + "_" + formatNumber(current_cycle, 6); // "000020"
+
+		// Reset branch variables to DUMMY_VAL for new event
+		out_Temperature 	= DUMMY_VAL;
+		out_B_Hg_Top		= DUMMY_VAL;
+		out_B_Hg_Bot		= DUMMY_VAL;
+		out_B_Hg_Top_Err	= DUMMY_VAL;
+		out_B_Hg_Bot_Err	= DUMMY_VAL;
+		out_Ucn_Top		= DUMMY_VAL;
+		out_Ucn_Bot		= DUMMY_VAL;
+		out_A_Top		= DUMMY_VAL;
+		out_A_Bot		= DUMMY_VAL;
+
+		// Construct file paths based on naming convention
+		std::string temperature_file 	= cycle_str + "_000_temperature_000.hd";
+		std::string hg_file   		= cycle_str + "_000_onlineAna_hgm_000.hd";
+		std::string ucn_file  		= cycle_str + "_000_onlineAna_ucn_000.hd";
+		std::string csm_file  		= cycle_str + "_000_csm_000.hd";
 		
+		// Run reductions 
+		out_Temperature		= ReduceTemperature(	temperature_file	);
+
+		HgResult out_hg		= ReduceHg(		hg_file			);
+		out_B_Hg_Top		= out_hg.B_Hg_Top;
+		out_B_Hg_Bot		= out_hg.B_Hg_Bot;
+		out_B_Hg_Top_Err	= out_hg.B_Hg_Top_Err;
+		out_B_Hg_Bot_Err	= out_hg.B_Hg_Bot_Err;
+
+		UcnResult out_ucn 	= ReduceUcn(		ucn_file		);
+		out_Ucn_Top		= out_ucn.Ucn_Top;
+		out_Ucn_Bot		= out_ucn.Ucn_Bot;
+		out_A_Top		= out_ucn.A_Top;
+		out_A_Bot		= out_ucn.A_Bot;
+		ReduceCsm(	csm_file	);
 		
 
 
 
 		// Save to tree
-		out_Cycle	= this_cycle;
+		out_Cycle 	= current_cycle;
 		out_Run		= this_run;
-		out_fHgTop	= fHgTop;
-		out_fHgBot	= fHgBot;
-		out_fHgTopErr	= fHgTopErr;
-		out_fHgBotErr	= fHgBotErr;
-		out_CsField	= avg_ch_field;
 		outTree->Fill();
 	}
-	Bvector test = CalculateField( FieldMap, 17.5, 270, -40., "down");
-	cout << test.rho << " " << test.phi << " " << test.z << "\n";
+
+
+	// ---------------------------------------------------------
+	// Write and cleanup
+	// ---------------------------------------------------------
 	outFile->cd();
 	outTree->Write(); // also deletes outTree
 	outFile->Close();
+	delete outFile;
 
+	cout << "Reduction done, save output to " << output_filename << endl;
 
-
-
-	return 1;
+	return 0;
 }
 
 
