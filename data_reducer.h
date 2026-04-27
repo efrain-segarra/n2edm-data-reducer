@@ -19,164 +19,26 @@
 #include "TFile.h"
 #include "TTree.h"
 #include "TVector.h"
+#include "TEnv.h"
 
 // n2dataread headers
 #include "SimpleLog/SimpleLog.h"
 #include "ListHash/ListHash.h"
 #include "N2readData.h"
 
+#include "constants.h"
+// reduction headers
+#include "ReduceRf.h"
+#include "ReduceSf.h"
+#include "ReduceHg.h"
+#include "ReduceUcn.h"
+#include "ReduceTemperature.h"
+#include "ReduceCsm.h"
 
 namespace fs = std::filesystem;
 
 using namespace std;
 
-// Global Constants
-const double gammaF = 3.4986211; // kHz/muT (gammaF=4 over 2pi)
-const double DUMMY_VAL = -9999.0;
-
-// ---------------------------------------------------------
-// Temperature reducer
-// ---------------------------------------------------------
-double ReduceTemperature(const std::string& filepath ){
-
-	// missing file flag
-	if (!fs::exists(filepath)) {
-		cerr << "Could not find file " << filepath << "\n";
-		return DUMMY_VAL; 
-	}
-
-	// Select which temperature sensor to read
-	int TEMPERATURE_COLUMN = 34;
-
-	// Initialize and check temperature data
-	tN2data N2data = {0};
-	N2_ReadFile(filepath.c_str(), &N2data);
-	if( N2data.NbRow == 0 ){
-		cerr << "Unexpected temperature file size of " << N2data.NbRow << "\n";
-		return DUMMY_VAL;
-	}
-
-	// Calculate average temperature in the cycle and return
-	double temp_sum = 0.0;
-	int it = 0;
-	for( int r=0; r<N2data.NbRow; r++ ){
-		double timestamp = ((double**)N2data.Data)[r][0];
-
-		// Hardcoded free precession window
-		if( timestamp > 47.2102 && timestamp < 227.21 ){
-			temp_sum += ((double**)N2data.Data)[r][TEMPERATURE_COLUMN];
-			it++;
-		}
-	}
-	temp_sum /= (double)it;
-	N2_ClearConfig(&N2data);
-
-	return temp_sum;
-}
-
-
-// ---------------------------------------------------------
-// Hg reducer
-// ---------------------------------------------------------
-struct HgResult {
-	double B_Hg_Top 	= DUMMY_VAL;
-	double B_Hg_Bot 	= DUMMY_VAL;
-	double B_Hg_Top_Err 	= DUMMY_VAL;
-	double B_Hg_Bot_Err	= DUMMY_VAL;
-};
-HgResult ReduceHg(const std::string& filepath ){
-	HgResult thisHgEvent;
-
-	// missing file flag
-	if (!fs::exists(filepath)) {
-		cerr << "Could not find file " << filepath << "\n";
-		return thisHgEvent; 
-	}
-
-
-	// Initialize and check hg data
-	tN2data N2data = {0};
-	N2_ReadFile(filepath.c_str(), &N2data);
-	if( N2data.NbRow != 1 ){
-		cerr << "Unexpected onlineAna_hg file size of " << N2data.NbRow << "\n";
-		return thisHgEvent;
-	}
-
-	// Grab Hg frequencies
-	double fHg_Top 		= ((double**)N2data.Data)[0][9];
-	double fHg_Bot 		= ((double**)N2data.Data)[0][10];
-	double fHg_Top_Err 	= ((double**)N2data.Data)[0][11];
-	double fHg_Bot_Err 	= ((double**)N2data.Data)[0][12];
-
-	// convert to field (pT)
-	fHg_Top *= 1000000. / 7.5901152;
-	fHg_Bot *= 1000000. / 7.5901152;
-	fHg_Top_Err *= 1000000. / 7.5901152;
-	fHg_Bot_Err *= 1000000. / 7.5901152;
-
-	// Check for NaN
-	if( fHg_Top != fHg_Top ){
-		fHg_Top 	= DUMMY_VAL;
-		fHg_Top_Err 	= DUMMY_VAL;
-	}
-	if( fHg_Bot != fHg_Bot ){
-		fHg_Bot 	= DUMMY_VAL;
-		fHg_Bot_Err 	= DUMMY_VAL;
-	}
-	thisHgEvent.B_Hg_Top = fHg_Top;
-	thisHgEvent.B_Hg_Bot = fHg_Bot;
-	thisHgEvent.B_Hg_Top_Err = fHg_Top_Err;
-	thisHgEvent.B_Hg_Bot_Err = fHg_Bot_Err;
-
-	return thisHgEvent;
-}
-
-// ---------------------------------------------------------
-// Ucn reducer
-// ---------------------------------------------------------
-struct UcnResult {
-	double Ucn_Top = DUMMY_VAL;
-	double Ucn_Bot = DUMMY_VAL;
-	double A_Top = DUMMY_VAL;
-	double A_Bot = DUMMY_VAL;
-};
-UcnResult ReduceUcn(const std::string& filepath ){
-	UcnResult thisUcnEvent;
-
-	// missing file flag
-	if (!fs::exists(filepath)) {
-		cerr << "Could not find file " << filepath << "\n";
-		return thisUcnEvent; 
-	}
-
-
-	// Initialize and check ucn data
-	tN2data N2data = {0};
-	N2_ReadFile(filepath.c_str(), &N2data);
-	if( N2data.NbRow != 1 ){
-		cerr << "Unexpected onlineAna_ucn file size of " << N2data.NbRow << "\n";
-		return thisUcnEvent;
-	}
-
-	// Grab ucn counts and asymmetry
-	double Ucn_Top 		= ((uint64_t**)N2data.Data)[0][6];
-	double Ucn_Bot 		= ((uint64_t**)N2data.Data)[0][7];
-	double A_Top 		= ((double**)N2data.Data)[0][9];
-	double A_Bot 		= ((double**)N2data.Data)[0][10];
-	thisUcnEvent.Ucn_Top	= Ucn_Top;
-	thisUcnEvent.Ucn_Bot	= Ucn_Bot;
-	thisUcnEvent.A_Top	= A_Top;
-	thisUcnEvent.A_Bot	= A_Bot;
-
-	return thisUcnEvent;
-}
-
-// ---------------------------------------------------------
-// Csm reducer
-// ---------------------------------------------------------
-void ReduceCsm(const std::string& filepath ){
-	return;
-}
 
 
 // ---------------------------------------------------------
@@ -187,7 +49,6 @@ std::string formatNumber(int num, int width = 6) {
 	oss << std::setw(width) << std::setfill('0') << num;
 	return oss.str();
 }
-
 
 
 
