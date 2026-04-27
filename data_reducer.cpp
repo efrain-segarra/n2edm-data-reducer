@@ -32,16 +32,10 @@ int main(int argc, char** argv ){
 
 
 	// ---------------------------------------------------------
-	// Set flags for the logger for error/output messages
-	// ---------------------------------------------------------
-	SimpleLog_Setup(NULL, NULL, 0, 0, 0, "\t");
-	SimpleLog_FilterLevel(SL_ERROR/*|SL_NOTICE SL_ALL*/); // Default is SL_ALL
-	
-	// ---------------------------------------------------------
 	// Build the B0 field using gradient expansion and map coefficients
 	// ---------------------------------------------------------
 	// Load the gradient field map
-	map<string,GradientInfo> FieldMap = Gradients("../../dataset/fieldmap/001_updated_optimized_all_B0_2022_2025.csv");
+	//map<string,GradientInfo> FieldMap = Gradients("../../dataset/fieldmap/001_updated_optimized_all_B0_2022_2025.csv");
 	/*
 	// Calculate the fields at the Cs sensor locations
 	for( int ch=0; ch < out_CsFieldCalc.size(); ch++){
@@ -69,8 +63,7 @@ int main(int argc, char** argv ){
 	std::string run_str = formatNumber(this_run, 6);	// "008003"
 	std::string dir_part1 = run_str.substr(0, 3);		// "008"
 	std::string dir_part2 = run_str.substr(3, 3);		// "003"
-	//std::string base_run_dir = "/xdata/n2edmdata/" + dir_part1 + "/" + dir_part2 + "/";
-	std::string base_run_dir = "/Users/efrainsegarra/work/n2EDM/projects/dec2025_analysis/dataset/" + string(argv[1]) + "/";
+	std::string base_run_dir = "/xdata/n2edmdata/" + dir_part1 + "/" + dir_part2 + "/";
 	std::string output_filename = "run_" + run_str + "_reduced.root";
 
 
