@@ -57,6 +57,8 @@ inline RfResult ReduceRf(const std::string& filepath ){
 	
 	UCN_Free_Precession_Start 	= thisRfEvent.Rf_Ucn1_Start + thisRfEvent.Rf_Ucn1_Duration; // after ucn1 rf pulse
 	UCN_Free_Precession_Stop   	= thisRfEvent.Rf_Ucn2_Start;				    // at start of ucn2 rf pulse
+												    //
+	N2_ClearConfig(&N2data);
 	return thisRfEvent;
 }
 
