@@ -43,8 +43,8 @@ int main(int argc, char** argv ){
 	// Build the B0 field using gradient expansion and map coefficients
 	// ---------------------------------------------------------
 	// Load the gradient field map
-	map<string,GradientInfo> FieldMap = Gradients("../../dataset/fieldmap/001_updated_optimized_all_B0_2022_2025.csv");
 	/*
+	map<string,GradientInfo> FieldMap = Gradients("../../dataset/fieldmap/001_updated_optimized_all_B0_2022_2025.csv");
 	// Calculate the fields at the Cs sensor locations
 	for( int ch=0; ch < out_CsFieldCalc.size(); ch++){
 		Bvector pos = CsCellPosition( ch+1 ); // daq channel starts at 1, not 0
@@ -64,6 +64,13 @@ int main(int argc, char** argv ){
 	int this_run = atoi(argv[1]);
 
 
+	// ---------------------------------------------------------
+	// Temporary overload for Hg analysis due to issues with online
+	// analysis files during Dec data-taking
+	// ---------------------------------------------------------
+	if( this_run < 8009 ){
+		LoadHgFallbackCsv("/Users/efrainsegarra/work/n2EDM/projects/dec2025_analysis/dataset/multi_run_plot_data.csv", this_run);
+	}
 
 	// ---------------------------------------------------------
 	// Format strings and get base directory of run:
@@ -110,7 +117,6 @@ int main(int argc, char** argv ){
 	cout << "Found " << available_cycles.size() << " unique cycles in run " << this_run << endl;
 
 
-
 	// ---------------------------------------------------------
 	// Loop over the cycles and perform reductions but do not fill tree yet because
 	// we need to fit the full cycle data to do visibility fit and THEN go back to 
@@ -131,12 +137,11 @@ int main(int argc, char** argv ){
 	std::vector<double> yBerr;
 	std::vector<double> zB;
 	std::vector<double> zBerr;
-
-
 	for( int current_cycle : available_cycles ){
+		// Initialize struct for cycle data
 		CycleData cycledata;
-		
 
+		// Format string for cycle reading
 		std::string cycle_str = base_run_dir + run_str + "_" + formatNumber(current_cycle, 6); // "000020"
 		
 		// ---------------------------------------------------------
@@ -194,10 +199,16 @@ int main(int argc, char** argv ){
 		// Hg :
 		// ---------------------------------------------------------
 		if( do_hg ){
-			// Construct file paths based on naming convention
-			std::string hg_file   		= cycle_str + "_000_onlineAna_hgm_000.hd";
-			// Run reduction
-			HgResult out_hg			= ReduceHg(		hg_file			);
+			HgResult out_hg;
+			if( this_run < 8009 ){
+				out_hg	= ReduceHgCsv( current_cycle );
+			}
+			else{
+				// Construct file paths based on naming convention
+				std::string hg_file   		= cycle_str + "_000_onlineAna_hgm_000.hd";
+				// Run reduction
+				out_hg			= ReduceHg(		hg_file			);
+			}
 			cycledata.B_Hg_Top		= out_hg.B_Hg_Top;
 			cycledata.B_Hg_Bot		= out_hg.B_Hg_Bot;
 			cycledata.B_Hg_Top_Err		= out_hg.B_Hg_Top_Err;
@@ -206,6 +217,7 @@ int main(int argc, char** argv ){
 			cycledata.Hg_Delta_Bot		= out_hg.Hg_Delta_Bot;
 			cycledata.Hg_Delta_Top_Err	= out_hg.Hg_Delta_Top_Err;
 			cycledata.Hg_Delta_Bot_Err	= out_hg.Hg_Delta_Bot_Err;
+
 		}
 
 		// ---------------------------------------------------------
@@ -224,6 +236,9 @@ int main(int argc, char** argv ){
 			cycledata.A_Bot_Err	= out_ucn.A_Bot_Err;
 		}
 
+		// ---------------------------------------------------------
+		// Combined Ucn and Hg :
+		// ---------------------------------------------------------
 		if( do_ucn && do_hg ){
 			if( cycledata.Rf_Ucn1_Freq 	== DUMMY_VAL ) continue;
 			if( cycledata.Hg_Delta_Top 	== DUMMY_VAL ) continue;
@@ -248,24 +263,26 @@ int main(int argc, char** argv ){
 			zBerr	 	.push_back( cycledata.A_Bot_Err );
 		}
 
-		// Save to tree
+		// Save cycle data in memory
 		cycledata.Cycle = current_cycle;
 		cycledata.Run	 = this_run;
-
 		runbuffer.push_back(cycledata);
 	}
 
 	// ---------------------------------------------------------
 	// Perform UCN visibility and frequency analysis
 	// ---------------------------------------------------------
+	
+	// Define graphs for the combined fit
 	TGraph2DErrors * gr2d_top = new TGraph2DErrors( xT.size(), xT.data(), yT.data(), zT.data(), 
 							   xTerr.data(), yTerr.data(), zTerr.data() );
 	TGraph2DErrors * gr2d_bot = new TGraph2DErrors( xB.size(), xB.data(), yB.data(), zB.data(), 
 							   xBerr.data(), yBerr.data(), zBerr.data() );
 	
+	// Define function to use
 	TF2* ramsey_fit = new TF2("ramsey_fit","-[0] * cos( (TMath::Pi() / [4]) * (x - [1]) ) + [2]*((1 - y)/2.0) + [3]*((1 + y)/2.0)",-0.005, 0.005,-1.5, 1.5);
 
-	ramsey_fit->SetParNames("alpha", "fn", "phi_minus1", "phi_plus1", "delta_nu");
+	ramsey_fit->SetParNames("alpha", "Phi", "delta_01", "delta_10", "delta_nu");
 	double guess_alpha = 0.85;
 	double guess_fn = 0.;
 	double guess_phi_m1 = 0.0;
@@ -385,7 +402,7 @@ int main(int argc, char** argv ){
 		outTree->Branch("Fn_Bot_Err"		,&out_Fn_Bot_Err	,"Fn_Bot_Err/D"		);
 	}
 
-	// Loop over all the cycle data
+	// Loop over all the cycle data to put into ROOT file
 	for (const auto& cycledata : runbuffer) {
 		// ---------------------------------------------------------
 		// RF :
