@@ -2,8 +2,9 @@
 
 // TODO:
 // - add hv
+// - add valve information to do timing instead of summaryfile
 // - add csm
-// - add trim coil information
+// - add trim coil information for B0, optimized field, etc.
 
 
 int main(int argc, char** argv ){
@@ -31,6 +32,7 @@ int main(int argc, char** argv ){
 	bool do_ucn	= config.GetValue("Process.Ucn", 0);
 	bool do_csm	= config.GetValue("Process.Csm", 0);
 	bool do_temp	= config.GetValue("Process.Temperature", 0);
+	bool do_summary = config.GetValue("Process.Summary", 0);
 
 
 	// ---------------------------------------------------------
@@ -64,6 +66,7 @@ int main(int argc, char** argv ){
 	int this_run = atoi(argv[1]);
 
 
+
 	// ---------------------------------------------------------
 	// Temporary overload for Hg analysis due to issues with online
 	// analysis files during Dec data-taking
@@ -79,8 +82,16 @@ int main(int argc, char** argv ){
 	std::string dir_part1 = run_str.substr(0, 3);		// "008"
 	std::string dir_part2 = run_str.substr(3, 3);		// "003"
 	//std::string base_run_dir = "/xdata/n2edmdata/" + dir_part1 + "/" + dir_part2 + "/";
-	std::string base_run_dir = "/Users/efrainsegarra/work/n2EDM/projects/dec2025_analysis/dataset/" + string(argv[1]) + "/";
+	//std::string base_run_dir = "/Users/efrainsegarra/work/n2EDM/projects/dec2025_analysis/dataset/" + string(argv[1]) + "/";
+	std::string base_run_dir = "/Users/efrainsegarra/work/n2EDM/projects/dec2025_analysis/data_fillingstorage/" + string(argv[1]) + "/";
+	std::string summary_str = base_run_dir + string(argv[1]) + "_summary.txt";
 	std::string output_filename = "run_" + run_str + "_reduced.root";
+
+
+	// ---------------------------------------------------------
+	// Load summary file
+	// ---------------------------------------------------------
+	LoadSummaryFile( summary_str );
 
 
 	// ---------------------------------------------------------
@@ -144,6 +155,22 @@ int main(int argc, char** argv ){
 		// Format string for cycle reading
 		std::string cycle_str = base_run_dir + run_str + "_" + formatNumber(current_cycle, 6); // "000020"
 		
+
+		// ---------------------------------------------------------
+		// Summary file:
+		// ---------------------------------------------------------
+		if( do_summary) {
+			SummaryResult out_summary = ReduceSummary( current_cycle );
+			cycledata.Tfill 	= out_summary.Tfill;
+			cycledata.Tstore 	= out_summary.Tstore;
+			cycledata.Tcount	= out_summary.Tcount;
+			// Put placeholder of precession time start/stop based on filling/storage times
+			// but will be overwritten by RF functionality if we load one
+			UCN_Free_Precession_Start = cycledata.Tfill;
+			UCN_Free_Precession_Stop  = cycledata.Tfill + cycledata.Tstore;
+			UCN_Counting_Stop	  = cycledata.Tfill + cycledata.Tstore + cycledata.Tcount;
+		}
+
 		// ---------------------------------------------------------
 		// RF :
 		// ---------------------------------------------------------
@@ -165,7 +192,7 @@ int main(int argc, char** argv ){
 
 		// Flag for requiring RF due to dependencies
 		if( UCN_Free_Precession_Start == DUMMY_VAL || UCN_Free_Precession_Stop == DUMMY_VAL ){
-			cout << "No RF file found. Cannot continue with reducer due to later dependencies. Skipping cycle...\n";
+			cout << "No summary or RF file found. Cannot continue with reducer due to later dependencies. Skipping cycle...\n";
 			continue;
 		}
 
@@ -274,42 +301,59 @@ int main(int argc, char** argv ){
 	// ---------------------------------------------------------
 	
 	// Define graphs for the combined fit
-	TGraph2DErrors * gr2d_top = new TGraph2DErrors( xT.size(), xT.data(), yT.data(), zT.data(), 
-							   xTerr.data(), yTerr.data(), zTerr.data() );
-	TGraph2DErrors * gr2d_bot = new TGraph2DErrors( xB.size(), xB.data(), yB.data(), zB.data(), 
-							   xBerr.data(), yBerr.data(), zBerr.data() );
-	
-	// Define function to use
-	TF2* ramsey_fit = new TF2("ramsey_fit","-[0] * cos( (TMath::Pi() / [4]) * (x - [1]) ) + [2]*((1 - y)/2.0) + [3]*((1 + y)/2.0)",-0.005, 0.005,-1.5, 1.5);
-
-	ramsey_fit->SetParNames("alpha", "Phi", "delta_01", "delta_10", "delta_nu");
-	double guess_alpha = 0.85;
-	double guess_fn = 0.;
-	double guess_phi_m1 = 0.0;
-	double guess_phi_p1 = 0.0;
 	double delta_nu = 1./(2*180. + 8*2/TMath::Pi());
+	double Vis_Top 		= DUMMY_VAL; 
+	double Vis_Top_Err 	= DUMMY_VAL; 
+	double Phi_M1_Top 	= DUMMY_VAL; 
+	double Phi_M1_Top_Err 	= DUMMY_VAL; 
+	double Phi_P1_Top 	= DUMMY_VAL; 
+	double Phi_P1_Top_Err 	= DUMMY_VAL; 
+	double Vis_Bot 		= DUMMY_VAL; 
+	double Vis_Bot_Err 	= DUMMY_VAL; 
+	double Phi_M1_Bot 	= DUMMY_VAL; 
+	double Phi_M1_Bot_Err 	= DUMMY_VAL; 
+	double Phi_P1_Bot 	= DUMMY_VAL; 
+	double Phi_P1_Bot_Err 	= DUMMY_VAL; 
+	TGraph2DErrors * gr2d_top = NULL;
+	TGraph2DErrors * gr2d_bot = NULL;
 
-	// Fit top chamber and get values
-	ramsey_fit->SetParameters(guess_alpha, guess_fn, guess_phi_m1, guess_phi_p1, delta_nu);
-	ramsey_fit->FixParameter(4, delta_nu);
-	gr2d_top->Fit(ramsey_fit);
-	double Vis_Top 		= ramsey_fit->GetParameter(0);
-	double Vis_Top_Err 	= ramsey_fit->GetParError(0);
-	double Phi_M1_Top 	= ramsey_fit->GetParameter(2);
-	double Phi_M1_Top_Err 	= ramsey_fit->GetParError(2);
-	double Phi_P1_Top 	= ramsey_fit->GetParameter(3);
-	double Phi_P1_Top_Err 	= ramsey_fit->GetParError(3);
+	if( do_ucn && do_hg ){
+		gr2d_top = new TGraph2DErrors( xT.size(), xT.data(), yT.data(), zT.data(), 
+		       			   xTerr.data(), yTerr.data(), zTerr.data() );
+		gr2d_bot = new TGraph2DErrors( xB.size(), xB.data(), yB.data(), zB.data(), 
+								   xBerr.data(), yBerr.data(), zBerr.data() );
+		
+		// Define function to use
+		TF2* ramsey_fit = new TF2("ramsey_fit","-[0] * cos( (TMath::Pi() / [4]) * (x - [1]) ) + [2]*((1 - y)/2.0) + [3]*((1 + y)/2.0)",-0.005, 0.005,-1.5, 1.5);
 
-	// Fit bottom chamber and get values
-	ramsey_fit->SetParameters(guess_alpha, guess_fn, guess_phi_m1, guess_phi_p1, delta_nu);
-	ramsey_fit->FixParameter(4, delta_nu);
-	gr2d_bot->Fit(ramsey_fit);
-	double Vis_Bot 		= ramsey_fit->GetParameter(0);
-	double Vis_Bot_Err 	= ramsey_fit->GetParError(0);
-	double Phi_M1_Bot 	= ramsey_fit->GetParameter(2);
-	double Phi_M1_Bot_Err 	= ramsey_fit->GetParError(2);
-	double Phi_P1_Bot 	= ramsey_fit->GetParameter(3);
-	double Phi_P1_Bot_Err 	= ramsey_fit->GetParError(3);
+		ramsey_fit->SetParNames("alpha", "Phi", "delta_01", "delta_10", "delta_nu");
+		double guess_alpha = 0.85;
+		double guess_fn = 0.;
+		double guess_phi_m1 = 0.0;
+		double guess_phi_p1 = 0.0;
+
+		// Fit top chamber and get values
+		ramsey_fit->SetParameters(guess_alpha, guess_fn, guess_phi_m1, guess_phi_p1, delta_nu);
+		ramsey_fit->FixParameter(4, delta_nu);
+		gr2d_top->Fit(ramsey_fit);
+		Vis_Top 		= ramsey_fit->GetParameter(0);
+		Vis_Top_Err 	= ramsey_fit->GetParError(0);
+		Phi_M1_Top 	= ramsey_fit->GetParameter(2);
+		Phi_M1_Top_Err 	= ramsey_fit->GetParError(2);
+		Phi_P1_Top 	= ramsey_fit->GetParameter(3);
+		Phi_P1_Top_Err 	= ramsey_fit->GetParError(3);
+
+		// Fit bottom chamber and get values
+		ramsey_fit->SetParameters(guess_alpha, guess_fn, guess_phi_m1, guess_phi_p1, delta_nu);
+		ramsey_fit->FixParameter(4, delta_nu);
+		gr2d_bot->Fit(ramsey_fit);
+		Vis_Bot 		= ramsey_fit->GetParameter(0);
+		Vis_Bot_Err 	= ramsey_fit->GetParError(0);
+		Phi_M1_Bot 	= ramsey_fit->GetParameter(2);
+		Phi_M1_Bot_Err 	= ramsey_fit->GetParError(2);
+		Phi_P1_Bot 	= ramsey_fit->GetParameter(3);
+		Phi_P1_Bot_Err 	= ramsey_fit->GetParError(3);
+	}
 
 
 	// ---------------------------------------------------------
@@ -319,6 +363,9 @@ int main(int argc, char** argv ){
 	TTree * outTree = new TTree("reduced_data","Reduced data from EDM run");
 	int out_Run 		= this_run;
 	int out_Cycle 		= 0;
+	double out_Tfill		= DUMMY_VAL;
+	double out_Tstore		= DUMMY_VAL;
+	double out_Tcount		= DUMMY_VAL;
 	double out_Rf_Hg_Start		= DUMMY_VAL;
 	double out_Rf_Hg_Duration	= DUMMY_VAL;
 	double out_Rf_Hg_Freq		= DUMMY_VAL;
@@ -355,6 +402,11 @@ int main(int argc, char** argv ){
 	double out_Fn_Bot_Err		= DUMMY_VAL;
 	outTree->Branch("Cycle"			,&out_Cycle		,"Cycle/I"		);
 	outTree->Branch("Run"			,&out_Run		,"Run/I"		);
+	if( do_summary ){
+		outTree->Branch("Tfill"		,&out_Tfill     ,"Tfill/D"	);
+		outTree->Branch("Tstore"	,&out_Tstore	,"Tstore/D"	);
+		outTree->Branch("Tcount"	,&out_Tcount	,"Tcount/D"	);
+	}
 	if( do_rf ){
 		outTree->Branch("Rf_Hg_Start"		,&out_Rf_Hg_Start	,"Rf_Hg_Start/D"	);
 		outTree->Branch("Rf_Hg_Duration"	,&out_Rf_Hg_Duration	,"Rf_Hg_Duration/D"	);
@@ -404,6 +456,14 @@ int main(int argc, char** argv ){
 
 	// Loop over all the cycle data to put into ROOT file
 	for (const auto& cycledata : runbuffer) {
+		// ---------------------------------------------------------
+		// Summary file :
+		// ---------------------------------------------------------
+		if( do_summary) {
+			out_Tfill	= cycledata.Tfill;
+			out_Tstore	= cycledata.Tstore;
+			out_Tcount	= cycledata.Tcount;
+		}
 		// ---------------------------------------------------------
 		// RF :
 		// ---------------------------------------------------------
@@ -503,14 +563,18 @@ int main(int argc, char** argv ){
 	// Write and cleanup
 	// ---------------------------------------------------------
 	outFile->cd();
-	gr2d_top->Write("Top_Ramsey");
-	gr2d_bot->Write("Bot_Ramsey");
+	if( do_ucn && do_hg ){
+		gr2d_top->Write("Top_Ramsey");
+		gr2d_bot->Write("Bot_Ramsey");
+	}
 	outTree->Write(); // also deletes outTree
 	outFile->Close();
 	delete outFile;
 
 	cout << "Reduction done, save output to " << output_filename << endl;
 
+	delete gr2d_top;
+	delete gr2d_bot;
 	return 0;
 }
 

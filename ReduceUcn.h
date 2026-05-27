@@ -51,10 +51,17 @@ UcnResult ReduceUcn(const std::string& filepath ){
 	double Sxx = 0;
 	double Sy[4] = {0}, Sxy[4] = {0}, Signal[4] = {0};
 	int N_Bg = 0;
-	double T_bg_start = 125;
-	double T_bg_stop = 225;
-	double T_cnt_start = 240;
-	double T_cnt_stop = 350;
+	double T_bg_start = UCN_Free_Precession_Stop - 20;
+	double T_bg_stop = UCN_Free_Precession_Stop  - 5; 
+	double T_cnt_start = UCN_Free_Precession_Stop;  // Tfill + Tstore
+	double T_cnt_stop = UCN_Counting_Stop;		// Tfill + Tstore + Tcount
+	if( UCN_Free_Precession_Stop == 0 || UCN_Free_Precession_Stop == DUMMY_VAL  ){ 
+		// direct shots so analyze different
+		T_bg_start = 0;
+		T_bg_stop = 0;
+		T_cnt_start = 12;
+		T_cnt_stop = UCN_Counting_Stop;
+	}
 	// Gather the full cycle information
 	for( int r=0; r<N2data.NbRow; r++ ){
 		double timestamp = ((double**)N2data.Data)[r][0];
@@ -78,6 +85,7 @@ UcnResult ReduceUcn(const std::string& filepath ){
 		}
         }
 
+
 	double denom = (N_Bg * Sxx - Sx*Sx);
 	for( int det = 0; det < 4; det++ ){
 		thisUcnEvent.Det[det].bg_slope = (N_Bg * Sxy[det] - Sx * Sy[det]) / denom;
@@ -86,8 +94,12 @@ UcnResult ReduceUcn(const std::string& filepath ){
             	// Background integral over signal window (Integral of At + B)
             	thisUcnEvent.Det[det].bg_integral = thisUcnEvent.Det[det].bg_slope * 0.5 * (T_cnt_stop*T_cnt_stop - T_cnt_start*T_cnt_start) 
                                  + thisUcnEvent.Det[det].bg_intercept * (T_cnt_stop - T_cnt_start);
-
-            	thisUcnEvent.Det[det].counts = Signal[det] - thisUcnEvent.Det[det].bg_integral;
+		if( std::isnan(thisUcnEvent.Det[det].bg_integral) ){
+			thisUcnEvent.Det[det].counts = Signal[det];
+		}
+		else{
+			thisUcnEvent.Det[det].counts = Signal[det] - thisUcnEvent.Det[det].bg_integral;
+		}
 		
 
             	// Error Propagation (Approximate)

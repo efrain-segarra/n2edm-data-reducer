@@ -30,6 +30,7 @@
 
 #include "constants.h"
 // reduction headers
+#include "ReduceSummary.h"
 #include "ReduceRf.h"
 #include "ReduceSf.h"
 #include "ReduceHg.h"
@@ -47,6 +48,9 @@ using namespace std;
 struct CycleData{
 	int Run 		= DUMMY_VAL;
 	int Cycle 		= DUMMY_VAL;
+	double Tfill		= DUMMY_VAL;
+	double Tstore		= DUMMY_VAL;
+	double Tcount		= DUMMY_VAL;
 	double Rf_Hg_Start	= DUMMY_VAL;
 	double Rf_Hg_Duration	= DUMMY_VAL;
 	double Rf_Hg_Freq	= DUMMY_VAL;
