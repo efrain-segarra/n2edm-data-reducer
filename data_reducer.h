@@ -20,6 +20,8 @@
 #include "TTree.h"
 #include "TVector.h"
 #include "TEnv.h"
+#include "TF2.h"
+#include "TGraph2DErrors.h"
 
 // n2dataread headers
 #include "ListHash/ListHash.h"
@@ -27,6 +29,7 @@
 
 #include "constants.h"
 // reduction headers
+#include "ReduceSummary.h"
 #include "ReduceRf.h"
 #include "ReduceSf.h"
 #include "ReduceHg.h"
@@ -38,7 +41,50 @@ namespace fs = std::filesystem;
 
 using namespace std;
 
-
+// ---------------------------------------------------------
+// Struct to store subsystem info in memory and then pipe to ROOT at end
+// ---------------------------------------------------------
+struct CycleData{
+	int Run 		= DUMMY_VAL;
+	int Cycle 		= DUMMY_VAL;
+	double Tfill		= DUMMY_VAL;
+	double Tstore		= DUMMY_VAL;
+	double Tcount		= DUMMY_VAL;
+	double Rf_Hg_Start	= DUMMY_VAL;
+	double Rf_Hg_Duration	= DUMMY_VAL;
+	double Rf_Hg_Freq	= DUMMY_VAL;
+	double Rf_Ucn1_Start	= DUMMY_VAL;
+	double Rf_Ucn1_Duration	= DUMMY_VAL;
+	double Rf_Ucn1_Freq	= DUMMY_VAL;
+	double Rf_Ucn2_Start	= DUMMY_VAL;
+	double Rf_Ucn2_Duration	= DUMMY_VAL;
+	double Rf_Ucn2_Freq	= DUMMY_VAL;
+	double Temperature 	= DUMMY_VAL;
+	double Sf_Top		= DUMMY_VAL;
+	double Sf_Bot		= DUMMY_VAL;
+	double Sf_1		= DUMMY_VAL;
+	double Sf_2		= DUMMY_VAL;
+	double Sf_3		= DUMMY_VAL;
+	double Sf_4		= DUMMY_VAL;
+	double B_Hg_Top		= DUMMY_VAL;
+	double B_Hg_Bot		= DUMMY_VAL;
+	double B_Hg_Top_Err	= DUMMY_VAL;
+	double B_Hg_Bot_Err	= DUMMY_VAL;
+	double Hg_Delta_Top	= DUMMY_VAL;
+	double Hg_Delta_Bot	= DUMMY_VAL;
+	double Hg_Delta_Top_Err	= DUMMY_VAL;
+	double Hg_Delta_Bot_Err	= DUMMY_VAL;
+	double Ucn_Top		= DUMMY_VAL;
+	double Ucn_Bot		= DUMMY_VAL;
+	double A_Top		= DUMMY_VAL;
+	double A_Bot		= DUMMY_VAL;
+	double A_Top_Err	= DUMMY_VAL;
+	double A_Bot_Err	= DUMMY_VAL;
+	double Fn_Top		= DUMMY_VAL;
+	double Fn_Bot		= DUMMY_VAL;
+	double Fn_Top_Err	= DUMMY_VAL;
+	double Fn_Bot_Err	= DUMMY_VAL;
+};
 
 // ---------------------------------------------------------
 // Helper: Zero-pad integers (e.g., 8003 -> "008003")

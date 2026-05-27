@@ -7,6 +7,12 @@
 namespace fs = std::filesystem;
 using namespace std;
 
+// Constants to be set from the SF file and then used by subsequent analyses
+inline double UCN_SF_1	= DUMMY_VAL;
+inline double UCN_SF_2	= DUMMY_VAL;
+inline double UCN_SF_3	= DUMMY_VAL;
+inline double UCN_SF_4	= DUMMY_VAL;
+
 // ---------------------------------------------------------
 // Sf reducer
 // ---------------------------------------------------------
@@ -83,6 +89,13 @@ inline SfResult ReduceSf(const std::string& filepath ){
 		thisSfEvent.Sf_Top = -1;
 	}
 
+	UCN_SF_1 = thisSfEvent.Sf_1;
+	UCN_SF_2 = thisSfEvent.Sf_2;
+	UCN_SF_3 = thisSfEvent.Sf_3;
+	UCN_SF_4 = thisSfEvent.Sf_4;
+
+
+	N2_ClearConfig(&N2data);
 	return thisSfEvent;
 }
 
