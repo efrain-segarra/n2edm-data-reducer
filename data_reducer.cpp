@@ -40,7 +40,7 @@ int main(int argc, char** argv ){
 	// ---------------------------------------------------------
 	// Load the gradient field map
 	/*
-	map<string,GradientInfo> FieldMap = Gradients("../../dataset/fieldmap/001_updated_optimized_all_B0_2022_2025.csv");
+	map<string,GradientInfo> FieldMap = Gradients("/xdata/dec2025supplement/001_updated_optimized_all_B0_2022_2025.csv");
 	// Calculate the fields at the Cs sensor locations
 	for( int ch=0; ch < out_CsFieldCalc.size(); ch++){
 		Bvector pos = CsCellPosition( ch+1 ); // daq channel starts at 1, not 0
@@ -66,7 +66,7 @@ int main(int argc, char** argv ){
 	// analysis files during Dec data-taking
 	// ---------------------------------------------------------
 	if( this_run < 8009 ){
-		LoadHgFallbackCsv("/Users/efrainsegarra/work/n2EDM/projects/dec2025_analysis/dataset/multi_run_plot_data.csv", this_run);
+		LoadHgFallbackCsv("/xdata/dec2025supplement/multi_run_plot_data.csv", this_run);
 	}
 
 	// ---------------------------------------------------------
@@ -75,10 +75,8 @@ int main(int argc, char** argv ){
 	std::string run_str = formatNumber(this_run, 6);	// "008003"
 	std::string dir_part1 = run_str.substr(0, 3);		// "008"
 	std::string dir_part2 = run_str.substr(3, 3);		// "003"
-	//std::string base_run_dir = "/xdata/n2edmdata/" + dir_part1 + "/" + dir_part2 + "/";
-	//std::string base_run_dir = "/Users/efrainsegarra/work/n2EDM/projects/dec2025_analysis/dataset/" + string(argv[1]) + "/";
-	std::string base_run_dir = "/Users/efrainsegarra/work/n2EDM/projects/dec2025_analysis/data_fillingstorage/" + string(argv[1]) + "/";
-	std::string summary_str = base_run_dir + string(argv[1]) + "_summary.txt";
+	std::string base_run_dir = "/xdata/n2edmdata/" + dir_part1 + "/" + dir_part2 + "/";
+	std::string summary_str = "/xdata/n2edmdata/summaryfiles/" + string(argv[1]) + "_summary.txt";
 	std::string output_filename = "run_" + run_str + "_reduced.root";
 
 
