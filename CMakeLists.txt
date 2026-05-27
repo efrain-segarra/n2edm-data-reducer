@@ -22,13 +22,13 @@ find_package(ROOT REQUIRED)
 
 # Find n2dataread headers and ROOT
 include_directories( 
-	${CMAKE_SOURCE_DIR}/../n2dataread/src 
+	/usr/local/n2dataread/src
 	${ROOT_INCLUDE_DIRS}
 	)
 
 add_executable( data_reducer data_reducer.cpp )
 target_link_libraries( data_reducer 
 	LINK_PUBLIC 
-		${CMAKE_SOURCE_DIR}/../n2dataread/install/libN2readData_dyn.dylib 
+		/usr/local/lib/libN2readData_dyn.so
 		${ROOT_LIBRARIES} 
 	)

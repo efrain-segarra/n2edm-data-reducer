@@ -36,12 +36,6 @@ int main(int argc, char** argv ){
 
 
 	// ---------------------------------------------------------
-	// Set flags for the logger for error/output messages
-	// ---------------------------------------------------------
-	SimpleLog_Setup(NULL, NULL, 0, 0, 0, "\t");
-	SimpleLog_FilterLevel(SL_ERROR/*|SL_NOTICE SL_ALL*/); // Default is SL_ALL
-	
-	// ---------------------------------------------------------
 	// Build the B0 field using gradient expansion and map coefficients
 	// ---------------------------------------------------------
 	// Load the gradient field map
