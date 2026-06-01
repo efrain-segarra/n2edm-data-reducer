@@ -2,7 +2,6 @@
 
 // TODO:
 // - add hv
-// - add valve information to do timing instead of summaryfile
 // - add csm
 // - add trim coil information for B0, optimized field, etc.
 
@@ -33,6 +32,9 @@ int main(int argc, char** argv ){
 	bool do_csm	= config.GetValue("Process.Csm", 0);
 	bool do_temp	= config.GetValue("Process.Temperature", 0);
 	bool do_summary = config.GetValue("Process.Summary", 0);
+	bool do_valves      = config.GetValue("Process.Valves",      0);
+	bool do_switch      = config.GetValue("Process.Switch",      0);
+	bool do_valve_timing = config.GetValue("Process.ValveTiming", 0);
 
 
 	// ---------------------------------------------------------
@@ -215,6 +217,44 @@ int main(int argc, char** argv ){
 		}
 
 		// ---------------------------------------------------------
+		// Switch :
+		// ---------------------------------------------------------
+		if( do_switch ){
+			std::string switch_file = cycle_str + "_000_switch_000.hd";
+			SwitchResult out_switch = ReduceSwitch( switch_file );
+			cycledata.Switch_count_start    = out_switch.Switch_count_start;
+			cycledata.Switch_count_duration = out_switch.Switch_count_duration;
+			cycledata.Switch_fill_start     = out_switch.Switch_fill_start;
+			cycledata.Switch_fill_duration  = out_switch.Switch_fill_duration;
+		}
+
+		// ---------------------------------------------------------
+		// Valves :
+		// ---------------------------------------------------------
+		if( do_valves ){
+			std::string valves_file	= cycle_str + "_000_valves_000.hd";
+			ValvesResult out_valves	= ReduceValves( valves_file );
+			cycledata.T_fill_end		= out_valves.T_fill_end;
+			cycledata.T_fill_hg_start	= out_valves.T_fill_hg_start;
+			cycledata.T_fill_hg_stop	= out_valves.T_fill_hg_stop;
+			cycledata.T_count_start		= out_valves.T_count_start;
+			cycledata.T_hg_pol_start	= out_valves.T_hg_pol_start;
+			cycledata.T_hg_pol_stop		= out_valves.T_hg_pol_stop;
+		}
+
+		// ---------------------------------------------------------
+		// Derive Tfill/Tstore/Tcount from valve and switch timestamps:
+		// ---------------------------------------------------------
+		if (do_valve_timing) {
+			if (cycledata.T_fill_end != DUMMY_VAL)
+				cycledata.Tfill = cycledata.T_fill_end;
+			if (cycledata.T_fill_end != DUMMY_VAL && cycledata.T_count_start != DUMMY_VAL)
+				cycledata.Tstore = cycledata.T_count_start - cycledata.T_fill_end;
+			if (cycledata.T_count_start != DUMMY_VAL && cycledata.Switch_fill_start != DUMMY_VAL)
+				cycledata.Tcount = cycledata.Switch_fill_start - cycledata.T_count_start;
+		}
+
+		// ---------------------------------------------------------
 		// Hg :
 		// ---------------------------------------------------------
 		if( do_hg ){
@@ -392,9 +432,17 @@ int main(int argc, char** argv ){
 	double out_Fn_Bot		= DUMMY_VAL;
 	double out_Fn_Top_Err		= DUMMY_VAL;
 	double out_Fn_Bot_Err		= DUMMY_VAL;
+	double out_Switch_count_start    = DUMMY_VAL;
+	double out_Switch_count_duration = DUMMY_VAL;
+	double out_Switch_fill_start     = DUMMY_VAL;
+	double out_Switch_fill_duration  = DUMMY_VAL;
+	double out_T_fill_hg_start	= DUMMY_VAL;
+	double out_T_fill_hg_stop	= DUMMY_VAL;
+	double out_T_hg_pol_start	= DUMMY_VAL;
+	double out_T_hg_pol_stop	= DUMMY_VAL;
 	outTree->Branch("Cycle"			,&out_Cycle		,"Cycle/I"		);
 	outTree->Branch("Run"			,&out_Run		,"Run/I"		);
-	if( do_summary ){
+	if( do_summary || do_valve_timing ){
 		outTree->Branch("Tfill"		,&out_Tfill     ,"Tfill/D"	);
 		outTree->Branch("Tstore"	,&out_Tstore	,"Tstore/D"	);
 		outTree->Branch("Tcount"	,&out_Tcount	,"Tcount/D"	);
@@ -445,13 +493,25 @@ int main(int argc, char** argv ){
 		outTree->Branch("Fn_Top_Err"		,&out_Fn_Top_Err	,"Fn_Top_Err/D"		);
 		outTree->Branch("Fn_Bot_Err"		,&out_Fn_Bot_Err	,"Fn_Bot_Err/D"		);
 	}
+	if( do_switch ){
+		outTree->Branch("Switch_count_start"   ,&out_Switch_count_start   ,"Switch_count_start/D"   );
+		outTree->Branch("Switch_count_duration",&out_Switch_count_duration,"Switch_count_duration/D");
+		outTree->Branch("Switch_fill_start"    ,&out_Switch_fill_start    ,"Switch_fill_start/D"    );
+		outTree->Branch("Switch_fill_duration" ,&out_Switch_fill_duration ,"Switch_fill_duration/D" );
+	}
+	if( do_valves ){
+		outTree->Branch("T_fill_hg_start",&out_T_fill_hg_start	,"T_fill_hg_start/D"	);
+		outTree->Branch("T_fill_hg_stop"	,&out_T_fill_hg_stop	,"T_fill_hg_stop/D"	);
+		outTree->Branch("T_hg_pol_start"	,&out_T_hg_pol_start	,"T_hg_pol_start/D"	);
+		outTree->Branch("T_hg_pol_stop"	,&out_T_hg_pol_stop	,"T_hg_pol_stop/D"	);
+	}
 
 	// Loop over all the cycle data to put into ROOT file
 	for (const auto& cycledata : runbuffer) {
 		// ---------------------------------------------------------
 		// Summary file :
 		// ---------------------------------------------------------
-		if( do_summary) {
+		if( do_summary || do_valve_timing ) {
 			out_Tfill	= cycledata.Tfill;
 			out_Tstore	= cycledata.Tstore;
 			out_Tcount	= cycledata.Tcount;
@@ -540,6 +600,22 @@ int main(int argc, char** argv ){
 					  - cycledata.A_Bot )
 					/ Vis_Bot 
 				);
+		}
+
+		// ---------------------------------------------------------
+		// Valves :
+		// ---------------------------------------------------------
+		if( do_switch ){
+			out_Switch_count_start    = cycledata.Switch_count_start;
+			out_Switch_count_duration = cycledata.Switch_count_duration;
+			out_Switch_fill_start     = cycledata.Switch_fill_start;
+			out_Switch_fill_duration  = cycledata.Switch_fill_duration;
+		}
+		if( do_valves ){
+			out_T_fill_hg_start	= cycledata.T_fill_hg_start;
+			out_T_fill_hg_stop	= cycledata.T_fill_hg_stop;
+			out_T_hg_pol_start	= cycledata.T_hg_pol_start;
+			out_T_hg_pol_stop	= cycledata.T_hg_pol_stop;
 		}
 
 		// Save to tree

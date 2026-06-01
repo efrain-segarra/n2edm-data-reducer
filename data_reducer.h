@@ -36,6 +36,8 @@
 #include "ReduceUcn.h"
 #include "ReduceTemperature.h"
 #include "ReduceCsm.h"
+#include "ReduceValves.h"
+#include "ReduceSwitch.h"
 
 namespace fs = std::filesystem;
 
@@ -84,6 +86,18 @@ struct CycleData{
 	double Fn_Bot		= DUMMY_VAL;
 	double Fn_Top_Err	= DUMMY_VAL;
 	double Fn_Bot_Err	= DUMMY_VAL;
+	// Switch timing (seconds relative to cycle start)
+	double Switch_count_start    = DUMMY_VAL;
+	double Switch_count_duration = DUMMY_VAL;
+	double Switch_fill_start     = DUMMY_VAL;
+	double Switch_fill_duration  = DUMMY_VAL;
+	// Valve transition timestamps (seconds relative to cycle start)
+	double T_fill_end	= DUMMY_VAL;
+	double T_fill_hg_start	= DUMMY_VAL;
+	double T_fill_hg_stop	= DUMMY_VAL;
+	double T_count_start	= DUMMY_VAL;
+	double T_hg_pol_start	= DUMMY_VAL;
+	double T_hg_pol_stop	= DUMMY_VAL;
 };
 
 // ---------------------------------------------------------
