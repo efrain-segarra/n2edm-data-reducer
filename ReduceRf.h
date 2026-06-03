@@ -42,21 +42,36 @@ inline RfResult ReduceRf(const std::string& filepath ){
 		cerr << "Unexpected rf file size of " << N2data.NbRow << "\n";
 		return thisRfEvent;
 	}
-	
-	thisRfEvent.Rf_Hg_Start 	= ((double**)N2data.Data)[0][1];
-	thisRfEvent.Rf_Hg_Duration 	= ((double**)N2data.Data)[0][2];
-	thisRfEvent.Rf_Hg_Freq 		= ((double**)N2data.Data)[0][3];
 
-	thisRfEvent.Rf_Ucn1_Start 	= ((double**)N2data.Data)[1][1];
-	thisRfEvent.Rf_Ucn1_Duration 	= ((double**)N2data.Data)[1][2];
-	thisRfEvent.Rf_Ucn1_Freq 	= ((double**)N2data.Data)[1][3];
-
-	thisRfEvent.Rf_Ucn2_Start 	= ((double**)N2data.Data)[2][1];
-	thisRfEvent.Rf_Ucn2_Duration 	= ((double**)N2data.Data)[2][2];
-	thisRfEvent.Rf_Ucn2_Freq 	= ((double**)N2data.Data)[2][3];
+	for( int r=0; r<N2data.NbRow; r++ ){
+		double start = ((double**)N2data.Data)[r][1];
+		double dur = ((double**)N2data.Data)[r][2];
+		double freq = ((double**)N2data.Data)[r][3];
+		
+		// Assume Hg frequencies are below 10 Hz and only 1 of these pulses
+		if( freq < 10 ){
+			thisRfEvent.Rf_Hg_Start = start;
+			thisRfEvent.Rf_Hg_Duration = dur;
+			thisRfEvent.Rf_Hg_Freq = freq;
+		}
+		else if( freq > 20 && freq < 35 ){
+			// If we do not yet have a UCN pulse saved,
+			// put it in the first pulse channel:
+			if( thisRfEvent.Rf_Ucn1_Start == DUMMY_VAL ){
+				thisRfEvent.Rf_Ucn1_Start = start;
+				thisRfEvent.Rf_Ucn1_Duration = dur;
+				thisRfEvent.Rf_Ucn1_Freq = freq;
+			}
+			else{ // otherwise put it in the second pulse channel:
+				thisRfEvent.Rf_Ucn2_Start = start;
+				thisRfEvent.Rf_Ucn2_Duration = dur;
+				thisRfEvent.Rf_Ucn2_Freq = freq;
+				UCN_Free_Precession_Start 	= thisRfEvent.Rf_Ucn1_Start + thisRfEvent.Rf_Ucn1_Duration; // after ucn1 rf pulse
+				UCN_Free_Precession_Stop   	= thisRfEvent.Rf_Ucn2_Start;				    // at start of ucn2 rf pulse
+			}
+		}
+	}
 	
-	UCN_Free_Precession_Start 	= thisRfEvent.Rf_Ucn1_Start + thisRfEvent.Rf_Ucn1_Duration; // after ucn1 rf pulse
-	UCN_Free_Precession_Stop   	= thisRfEvent.Rf_Ucn2_Start;				    // at start of ucn2 rf pulse
 												    //
 	N2_ClearConfig(&N2data);
 	return thisRfEvent;
